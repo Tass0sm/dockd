@@ -2,6 +2,7 @@
 #include <cstring>
 #include <syslog.h>
 #include <pthread.h>
+#include <unistd.h>
 
 #include "crtc.h"
 #include "hooks.h"
@@ -62,12 +63,44 @@ void ACPIHandler::handleEvent(ACPIEvent event) {
 
 }
 
+void getConfigPath(char *configPath, int bufferSize) {
+    char *configHomePath;
+
+    configHomePath = getenv("XDG_CONFIG_HOME");
+    if (configHomePath == NULL || strlen(configHomePath) == 0) {
+        configHomePath = getenv("HOME");
+        strcpy(configPath, configHomePath);
+        strncat(configPath, "/.config", bufferSize - 1 - strlen(configPath));
+    } else {
+        strcpy(configPath, configHomePath);
+    }
+    strncat(configPath, "/dockd/config.ini", bufferSize - 1 - strlen(configPath));
+}
+
+int readConfig(Ini *config) {
+    char configPath[64];
+    getConfigPath(configPath, 64);
+
+    if (access(configPath, F_OK) == 0) {
+        config->readIni(configPath);
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
 int startDaemon() {
 
     openlog("dockd", LOG_NDELAY | LOG_PID, LOG_DAEMON);
 
     ACPI acpi;
     ACPIHandler handler;
+    Ini config;
+
+    // Read dockd config file and store in config.
+    if (readConfig(&config)) {
+        acpi.applyConfig(&config);
+    }
 
     acpi.addEventHandler(&handler);
 
